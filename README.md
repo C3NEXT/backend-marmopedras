@@ -209,8 +209,8 @@ Entre eles:
 </table>
 
 ---
-
-
+## 🛠️ Repositório Frontend: https://github.com/C3NEXT/frontend-marmopedras
+---
 
 # 🧭 Fluxo do Sistema
 
@@ -236,4 +236,3 @@ G --> H[Registro da Movimentação]
 
 H --> I[Painel Operacional]
 H --> J[Histórico]
-
