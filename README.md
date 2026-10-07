@@ -18,7 +18,6 @@
   <a href="#-como-rodar-o-projeto">Como Rodar</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
   <a href="#-documentação">Documentação</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
   <a href="#-equipe">Equipe</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-  <a href="#-licença">Licença</a>
 </p>
 
 <p align="center">
@@ -37,10 +36,6 @@
   <img
     alt="JavaScript"
     src="https://img.shields.io/badge/JavaScript-ES2025-F7DF1E"
-  >
-  <img
-    alt="License"
-    src="https://img.shields.io/badge/license-MIT-49AA26"
   >
 </p>
 
