@@ -1,11 +1,6 @@
-
 const MASTER = { useMasterKey: true };
 
-const DEPOSITOS = [
-  "Depósito A",
-  "Depósito B",
-  "Depósito C"
-];
+const DEPOSITOS = ["Depósito A", "Depósito B", "Depósito C"];
 
 const UNIDADE = "chapas";
 const TZ = "America/Recife";
@@ -15,30 +10,18 @@ const CATEGORIAS = [
   "Mármores",
   "Quartzitos",
   "Sintéticos",
-  "Dolomíticos"
+  "Dolomíticos",
 ];
 
-const TIPOS = [
-  "Escovado",
-  "Acetinado",
-  "Polido"
-];
+const TIPOS = ["Escovado", "Acetinado", "Polido"];
 
 function fail(erro, campos) {
-  throw new Parse.Error(
-    141,
-    JSON.stringify({ erro, campos })
-  );
+  throw new Parse.Error(141, JSON.stringify({ erro, campos }));
 }
 
 function auth(req) {
   if (!req.user) {
-    throw new Parse.Error(
-      209,
-      JSON.stringify({
-        erro: "Não autenticado"
-      })
-    );
+    throw new Parse.Error(209, JSON.stringify({ erro: "Não autenticado" }));
   }
 
   return req.user;
@@ -51,21 +34,18 @@ function agora() {
     timeZone: TZ,
     year: "numeric",
     month: "2-digit",
-    day: "2-digit"
+    day: "2-digit",
   }).formatToParts(d);
 
-  const valores = Object.fromEntries(
-    partes.map((p) => [p.type, p.value])
-  );
+  const valores = Object.fromEntries(partes.map((p) => [p.type, p.value]));
 
-  const data =
-    `${valores.year}-${valores.month}-${valores.day}`;
+  const data = `${valores.year}-${valores.month}-${valores.day}`;
 
   const hora = new Intl.DateTimeFormat("pt-BR", {
     timeZone: TZ,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false
+    hour12: false,
   }).format(d);
 
   return { data, hora };
@@ -75,10 +55,8 @@ function dataHora(data) {
   const atual = agora();
 
   return {
-    data: /^\d{4}-\d{2}-\d{2}$/.test(data || "")
-      ? data
-      : atual.data,
-    hora: atual.hora
+    data: /^\d{4}-\d{2}-\d{2}$/.test(data || "") ? data : atual.data,
+    hora: atual.hora,
   };
 }
 
@@ -97,8 +75,7 @@ function calcStatus(estoque, minimo) {
   return "baixo";
 }
 
-const num = (v) =>
-  Number(String(v).replace(",", "."));
+const num = (v) => Number(String(v).replace(",", "."));
 
 function quantidadeValida(v) {
   const q = num(v);
@@ -111,8 +88,7 @@ function quantidadeValida(v) {
     q <= 0
   ) {
     fail("Quantidade inválida", {
-      quantidade:
-        "Informe uma quantidade inteira de chapas maior que zero"
+      quantidade: "Informe uma quantidade inteira de chapas maior que zero",
     });
   }
 
@@ -130,8 +106,7 @@ function minimoValido(v) {
     n < 0
   ) {
     fail("Estoque mínimo inválido", {
-      minimo:
-        "Informe um número inteiro maior ou igual a zero"
+      minimo: "Informe um número inteiro maior ou igual a zero",
     });
   }
 
@@ -140,13 +115,10 @@ function minimoValido(v) {
 
 function exigirUnidadeChapas(m) {
   if (m.get("unidade") !== UNIDADE) {
-    fail(
-      "A unidade do material precisa ser atualizada no Back4App",
-      {
-        material:
-          "Verifique a unidade e o estoque cadastrado antes de movimentar chapas"
-      }
-    );
+    fail("A unidade do material precisa ser atualizada no Back4App", {
+      material:
+        "Verifique a unidade e o estoque cadastrado antes de movimentar chapas",
+    });
   }
 }
 
@@ -157,8 +129,7 @@ const fmtQtd = (tipo, q, un) =>
       ? `-${q} ${un}`
       : `${q} ${un}`;
 
-const escRx = (s) =>
-  String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 async function todos(className, ordenar) {
   const itens = [];
@@ -191,10 +162,7 @@ async function todos(className, ordenar) {
   return itens;
 }
 
-async function buscarMaterial({
-  codigo,
-  material
-} = {}) {
+async function buscarMaterial({ codigo, material } = {}) {
   const q = new Parse.Query("Material");
 
   if (codigo) {
@@ -207,7 +175,7 @@ async function buscarMaterial({
 
   if (!m) {
     fail("Material não encontrado", {
-      material: "Selecione um material"
+      material: "Selecione um material",
     });
   }
 
@@ -218,10 +186,7 @@ async function proximoCodigo() {
   const lista = await todos("Material");
 
   const maior = lista.reduce((mx, m) => {
-    const n = parseInt(
-      String(m.get("cod")).replace(/\D/g, ""),
-      10
-    );
+    const n = parseInt(String(m.get("cod")).replace(/\D/g, ""), 10);
 
     return isNaN(n) ? mx : Math.max(mx, n);
   }, 0);
@@ -234,32 +199,32 @@ async function criarMaterialNovo({
   categoria,
   tipo = "",
   unidade = UNIDADE,
-  minimo = 0
+  minimo = 0,
 }) {
   nome = String(nome || "").trim();
   tipo = tipo || "";
 
   if (!nome) {
     fail("Informe o nome do material", {
-      nomeNovo: "Informe o nome do material"
+      nomeNovo: "Informe o nome do material",
     });
   }
 
   if (!CATEGORIAS.includes(categoria)) {
     fail("Categoria inválida", {
-      categoria: "Selecione uma categoria válida"
+      categoria: "Selecione uma categoria válida",
     });
   }
 
   if (tipo && !TIPOS.includes(tipo)) {
     fail("Tipo inválido", {
-      tipo: "Tipo inválido"
+      tipo: "Tipo inválido",
     });
   }
 
   if (unidade !== UNIDADE) {
     fail("Unidade inválida", {
-      unidade: "A unidade deve ser chapas"
+      unidade: "A unidade deve ser chapas",
     });
   }
 
@@ -273,8 +238,7 @@ async function criarMaterialNovo({
 
   if (dup) {
     fail("Material já cadastrado", {
-      nomeNovo:
-        `Já existe um material igual (${dup.get("cod")})`
+      nomeNovo: `Já existe um material igual (${dup.get("cod")})`,
     });
   }
 
@@ -286,7 +250,7 @@ async function criarMaterialNovo({
     categoria,
     tipo,
     unidade: UNIDADE,
-    minimo: minimoNumerico
+    minimo: minimoNumerico,
   });
 
   await m.save(null, MASTER);
@@ -297,12 +261,7 @@ async function criarMaterialNovo({
 async function enriquecerMovs(itens) {
   const materiais = await todos("Material");
 
-  const porCod = Object.fromEntries(
-    materiais.map((m) => [
-      m.get("cod"),
-      m
-    ])
-  );
+  const porCod = Object.fromEntries(materiais.map((m) => [m.get("cod"), m]));
 
   return itens.map((i) => {
     const j = i.toJSON();
@@ -311,12 +270,8 @@ async function enriquecerMovs(itens) {
     return {
       ...j,
       codigo: j.cod,
-      categoria: m
-        ? m.get("categoria")
-        : "",
-      tipo_material: m
-        ? m.get("tipo") || ""
-        : ""
+      categoria: m ? m.get("categoria") : "",
+      tipo_material: m ? m.get("tipo") || "" : "",
     };
   });
 }
@@ -324,7 +279,7 @@ async function enriquecerMovs(itens) {
 async function listarMateriais() {
   const [materiais, estoques] = await Promise.all([
     todos("Material", "cod"),
-    todos("Estoque")
+    todos("Estoque"),
   ]);
 
   return materiais.map((m) => {
@@ -335,18 +290,11 @@ async function listarMateriais() {
         (e) =>
           e.get("cod") === cod &&
           DEPOSITOS.includes(e.get("deposito")) &&
-          Number(e.get("qtd")) > 0
+          Number(e.get("qtd")) > 0,
       )
-      .sort(
-        (a, b) =>
-          Number(b.get("qtd")) -
-          Number(a.get("qtd"))
-      );
+      .sort((a, b) => Number(b.get("qtd")) - Number(a.get("qtd")));
 
-    const total = itens.reduce(
-      (s, e) => s + Number(e.get("qtd")),
-      0
-    );
+    const total = itens.reduce((s, e) => s + Number(e.get("qtd")), 0);
 
     const porDeposito = {};
 
@@ -354,8 +302,7 @@ async function listarMateriais() {
       const deposito = e.get("deposito");
 
       porDeposito[deposito] =
-        (porDeposito[deposito] || 0) +
-        Number(e.get("qtd"));
+        (porDeposito[deposito] || 0) + Number(e.get("qtd"));
     }
 
     return {
@@ -366,14 +313,9 @@ async function listarMateriais() {
       unidade: m.get("unidade"),
       estoque: total,
       minimo: m.get("minimo") || 0,
-      local: itens[0]
-        ? itens[0].get("deposito")
-        : null,
+      local: itens[0] ? itens[0].get("deposito") : null,
       estoques: porDeposito,
-      status: calcStatus(
-        total,
-        m.get("minimo")
-      )
+      status: calcStatus(total, m.get("minimo")),
     };
   });
 }
@@ -384,7 +326,7 @@ async function salvarMov(campos) {
   mov.set({
     ...campos,
     nota: campos.nota || "—",
-    obs: campos.obs || ""
+    obs: campos.obs || "",
   });
 
   await mov.save(null, MASTER);
@@ -397,17 +339,11 @@ const pubUser = (u) => ({
   nome: u.get("nome"),
   email: u.get("email"),
   telefone: u.get("telefone"),
-  cargo: u.get("cargo")
+  cargo: u.get("cargo"),
 });
 
 Parse.Cloud.define("register", async (req) => {
-  const {
-    nome,
-    email,
-    telefone,
-    cargo,
-    senha
-  } = req.params;
+  const { nome, email, telefone, cargo, senha } = req.params;
 
   const campos = {};
 
@@ -427,9 +363,7 @@ Parse.Cloud.define("register", async (req) => {
     fail("Dados inválidos", campos);
   }
 
-  const mail = String(email)
-    .toLowerCase()
-    .trim();
+  const mail = String(email).toLowerCase().trim();
 
   const user = new Parse.User();
 
@@ -439,7 +373,7 @@ Parse.Cloud.define("register", async (req) => {
     password: senha,
     nome: String(nome).trim(),
     telefone: telefone || "",
-    cargo: cargo || "Funcionário"
+    cargo: cargo || "Funcionário",
   });
 
   try {
@@ -447,7 +381,7 @@ Parse.Cloud.define("register", async (req) => {
   } catch (e) {
     if (e.code === 202 || e.code === 203) {
       fail("E-mail já cadastrado", {
-        email: "E-mail já cadastrado"
+        email: "E-mail já cadastrado",
       });
     }
 
@@ -456,7 +390,7 @@ Parse.Cloud.define("register", async (req) => {
 
   return {
     token: user.getSessionToken(),
-    usuario: pubUser(user)
+    usuario: pubUser(user),
   };
 });
 
@@ -468,22 +402,19 @@ Parse.Cloud.define("login", async (req) => {
       String(email || "")
         .toLowerCase()
         .trim(),
-      senha || ""
+      senha || "",
     );
 
     return {
       token: user.getSessionToken(),
-      usuario: pubUser(user)
+      usuario: pubUser(user),
     };
   } catch (e) {
     fail("E-mail ou senha incorretos");
   }
 });
 
-Parse.Cloud.define(
-  "me",
-  async (req) => pubUser(auth(req))
-);
+Parse.Cloud.define("me", async (req) => pubUser(auth(req)));
 
 Parse.Cloud.define("painel", async (req) => {
   auth(req);
@@ -491,16 +422,9 @@ Parse.Cloud.define("painel", async (req) => {
   const { data } = agora();
 
   const mq = (tipo) =>
-    new Parse.Query("Movimentacao")
-      .equalTo("tipo", tipo)
-      .equalTo("data", data);
+    new Parse.Query("Movimentacao").equalTo("tipo", tipo).equalTo("data", data);
 
-  const [
-    materiais,
-    movs,
-    entradasHoje,
-    saidasHoje
-  ] = await Promise.all([
+  const [materiais, movs, entradasHoje, saidasHoje] = await Promise.all([
     listarMateriais(),
 
     new Parse.Query("Movimentacao")
@@ -510,16 +434,10 @@ Parse.Cloud.define("painel", async (req) => {
 
     mq("Entrada").count(MASTER),
 
-    mq("Saída")
-      .limit(1000)
-      .find(MASTER)
+    mq("Saída").limit(1000).find(MASTER),
   ]);
 
-  const obras = new Set(
-    saidasHoje
-      .map((s) => s.get("obra"))
-      .filter(Boolean)
-  );
+  const obras = new Set(saidasHoje.map((s) => s.get("obra")).filter(Boolean));
 
   const ultimas = await enriquecerMovs(movs);
 
@@ -529,9 +447,7 @@ Parse.Cloud.define("painel", async (req) => {
       entradasHoje,
       saidasHoje: saidasHoje.length,
       obrasHoje: obras.size,
-      saldoBaixo: materiais.filter(
-        (m) => m.status !== "ok"
-      ).length
+      saldoBaixo: materiais.filter((m) => m.status !== "ok").length,
     },
 
     ultimasMovimentacoes: ultimas.map((m) => ({
@@ -541,7 +457,7 @@ Parse.Cloud.define("painel", async (req) => {
       qtd: m.qtd,
       codigo: m.codigo,
       categoria: m.categoria,
-      tipo_material: m.tipo_material
+      tipo_material: m.tipo_material,
     })),
 
     criticos: materiais
@@ -549,36 +465,24 @@ Parse.Cloud.define("painel", async (req) => {
       .slice(0, 3)
       .map((m) => ({
         cod: m.cod,
-        nome: m.nome
-      }))
+        nome: m.nome,
+      })),
   };
 });
 
 Parse.Cloud.define("listarMateriais", async (req) => {
   auth(req);
 
-  const {
-    q = "",
-    categoria = "Todos",
-    status = "Todos"
-  } = req.params;
+  const { q = "", categoria = "Todos", status = "Todos" } = req.params;
 
   const termo = String(q).toLowerCase();
 
   return (await listarMateriais()).filter(
     (m) =>
-      (
-        m.nome.toLowerCase().includes(termo) ||
-        m.cod.toLowerCase().includes(termo)
-      ) &&
-      (
-        categoria === "Todos" ||
-        m.categoria === categoria
-      ) &&
-      (
-        status === "Todos" ||
-        m.status === String(status).toLowerCase()
-      )
+      (m.nome.toLowerCase().includes(termo) ||
+        m.cod.toLowerCase().includes(termo)) &&
+      (categoria === "Todos" || m.categoria === categoria) &&
+      (status === "Todos" || m.status === String(status).toLowerCase()),
   );
 });
 
@@ -593,22 +497,13 @@ Parse.Cloud.define("categorias", async (req) => {
     .filter((c) => !CATEGORIAS.includes(c))
     .sort();
 
-  return [
-    "Todos",
-    ...CATEGORIAS,
-    ...extras
-  ];
+  return ["Todos", ...CATEGORIAS, ...extras];
 });
 
 Parse.Cloud.define("criarMaterial", async (req) => {
   auth(req);
 
-  const {
-    nome,
-    categoria,
-    tipo = "",
-    minimo = 0
-  } = req.params;
+  const { nome, categoria, tipo = "", minimo = 0 } = req.params;
 
   if (!nome || !categoria) {
     fail("nome e categoria são obrigatórios");
@@ -619,12 +514,12 @@ Parse.Cloud.define("criarMaterial", async (req) => {
     categoria,
     tipo,
     unidade: UNIDADE,
-    minimo
+    minimo,
   });
 
   return {
     ...m.toJSON(),
-    codigo: m.get("cod")
+    codigo: m.get("cod"),
   };
 });
 
@@ -641,14 +536,14 @@ Parse.Cloud.define("registrarEntrada", async (req) => {
     local = "Depósito A",
     nota = "",
     data,
-    obs = ""
+    obs = "",
   } = req.params;
 
   const q = quantidadeValida(quantidade);
 
   if (!DEPOSITOS.includes(local)) {
     fail("Depósito inválido", {
-      local: "Selecione o Depósito A, B ou C"
+      local: "Selecione o Depósito A, B ou C",
     });
   }
 
@@ -657,11 +552,11 @@ Parse.Cloud.define("registrarEntrada", async (req) => {
         nome: material,
         categoria,
         tipo,
-        unidade: UNIDADE
+        unidade: UNIDADE,
       })
     : await buscarMaterial({
         codigo,
-        material
+        material,
       });
 
   exigirUnidadeChapas(m);
@@ -677,7 +572,7 @@ Parse.Cloud.define("registrarEntrada", async (req) => {
     est.set({
       cod: m.get("cod"),
       deposito: local,
-      qtd: 0
+      qtd: 0,
     });
   }
 
@@ -696,7 +591,7 @@ Parse.Cloud.define("registrarEntrada", async (req) => {
     nota,
     obs,
     responsavel: user.get("nome"),
-    ...dataHora(data)
+    ...dataHora(data),
   });
 
   return {
@@ -704,7 +599,7 @@ Parse.Cloud.define("registrarEntrada", async (req) => {
     codigo: m.get("cod"),
     categoria: m.get("categoria"),
     tipo_material: m.get("tipo") || "",
-    materialNovo: !!novoMaterial
+    materialNovo: !!novoMaterial,
   };
 });
 
@@ -719,12 +614,12 @@ Parse.Cloud.define("registrarSaida", async (req) => {
     data,
     responsavel,
     obs = "",
-    local
+    local,
   } = req.params;
 
   const m = await buscarMaterial({
     codigo,
-    material
+    material,
   });
 
   const q = quantidadeValida(quantidade);
@@ -735,13 +630,13 @@ Parse.Cloud.define("registrarSaida", async (req) => {
 
   if (!obraDestino) {
     fail("Informe a obra de destino", {
-      obra: "Informe a obra de destino"
+      obra: "Informe a obra de destino",
     });
   }
 
   if (local && !DEPOSITOS.includes(local)) {
     fail("Depósito inválido", {
-      local: "Selecione um depósito válido"
+      local: "Selecione um depósito válido",
     });
   }
 
@@ -756,22 +651,15 @@ Parse.Cloud.define("registrarSaida", async (req) => {
     eq.containedIn("deposito", DEPOSITOS);
   }
 
-  const deps = (await eq.find(MASTER))
-    .sort(
-      (a, b) =>
-        Number(b.get("qtd")) -
-        Number(a.get("qtd"))
-    );
-
-  const total = deps.reduce(
-    (s, d) => s + Number(d.get("qtd")),
-    0
+  const deps = (await eq.find(MASTER)).sort(
+    (a, b) => Number(b.get("qtd")) - Number(a.get("qtd")),
   );
+
+  const total = deps.reduce((s, d) => s + Number(d.get("qtd")), 0);
 
   if (q > total) {
     fail("Estoque insuficiente", {
-      quantidade:
-        `Estoque insuficiente (disponível: ${total} chapas)`
+      quantidade: `Estoque insuficiente (disponível: ${total} chapas)`,
     });
   }
 
@@ -784,10 +672,7 @@ Parse.Cloud.define("registrarSaida", async (req) => {
       break;
     }
 
-    const tirar = Math.min(
-      Number(d.get("qtd")),
-      restante
-    );
+    const tirar = Math.min(Number(d.get("qtd")), restante);
 
     d.increment("qtd", -tirar);
 
@@ -806,277 +691,213 @@ Parse.Cloud.define("registrarSaida", async (req) => {
     quantidade: q,
     unidade: UNIDADE,
     qtd: fmtQtd("Saída", q, UNIDADE),
-    local:
-      `${origens.join(" / ")} → ${obraDestino}`,
+    local: `${origens.join(" / ")} → ${obraDestino}`,
     obra: obraDestino,
     obs,
-    responsavel:
-      responsavel || user.get("nome"),
-    ...dataHora(data)
+    responsavel: responsavel || user.get("nome"),
+    ...dataHora(data),
   });
 });
 
-Parse.Cloud.define(
-  "registrarTransferencia",
-  async (req) => {
-    const user = auth(req);
+Parse.Cloud.define("registrarTransferencia", async (req) => {
+  const user = auth(req);
 
-    const {
-      material,
-      codigo,
-      quantidade,
-      origem,
-      destino,
-      obs = ""
-    } = req.params;
+  const { material, codigo, quantidade, origem, destino, obs = "" } = req.params;
 
-    const m = await buscarMaterial({
-      codigo,
-      material
+  const m = await buscarMaterial({
+    codigo,
+    material,
+  });
+
+  const q = quantidadeValida(quantidade);
+
+  exigirUnidadeChapas(m);
+
+  const campos = {};
+
+  if (!DEPOSITOS.includes(origem)) {
+    campos.origem = "Selecione a origem";
+  }
+
+  if (!DEPOSITOS.includes(destino)) {
+    campos.destino = "Selecione o destino";
+  }
+
+  if (origem && origem === destino) {
+    campos.destino = "Origem e destino devem ser diferentes";
+  }
+
+  if (Object.keys(campos).length) {
+    fail("Dados inválidos", campos);
+  }
+
+  const cod = m.get("cod");
+
+  const [eOrigem, eDestino] = await Promise.all([
+    new Parse.Query("Estoque")
+      .equalTo("cod", cod)
+      .equalTo("deposito", origem)
+      .first(MASTER),
+
+    new Parse.Query("Estoque")
+      .equalTo("cod", cod)
+      .equalTo("deposito", destino)
+      .first(MASTER),
+  ]);
+
+  const disponivel = eOrigem ? Number(eOrigem.get("qtd")) : 0;
+
+  if (q > disponivel) {
+    fail("Saldo insuficiente na origem", {
+      quantidade: `Apenas ${disponivel} chapas disponíveis em ${origem}`,
     });
+  }
 
-    const q = quantidadeValida(quantidade);
+  eOrigem.increment("qtd", -q);
 
-    exigirUnidadeChapas(m);
+  let dest = eDestino;
 
-    const campos = {};
+  if (!dest) {
+    dest = new Parse.Object("Estoque");
 
-    if (!DEPOSITOS.includes(origem)) {
-      campos.origem = "Selecione a origem";
-    }
-
-    if (!DEPOSITOS.includes(destino)) {
-      campos.destino = "Selecione o destino";
-    }
-
-    if (origem && origem === destino) {
-      campos.destino =
-        "Origem e destino devem ser diferentes";
-    }
-
-    if (Object.keys(campos).length) {
-      fail("Dados inválidos", campos);
-    }
-
-    const cod = m.get("cod");
-
-    const [
-      eOrigem,
-      eDestino
-    ] = await Promise.all([
-      new Parse.Query("Estoque")
-        .equalTo("cod", cod)
-        .equalTo("deposito", origem)
-        .first(MASTER),
-
-      new Parse.Query("Estoque")
-        .equalTo("cod", cod)
-        .equalTo("deposito", destino)
-        .first(MASTER)
-    ]);
-
-    const disponivel = eOrigem
-      ? Number(eOrigem.get("qtd"))
-      : 0;
-
-    if (q > disponivel) {
-      fail("Saldo insuficiente na origem", {
-        quantidade:
-          `Apenas ${disponivel} chapas disponíveis em ${origem}`
-      });
-    }
-
-    eOrigem.increment("qtd", -q);
-
-    let dest = eDestino;
-
-    if (!dest) {
-      dest = new Parse.Object("Estoque");
-
-      dest.set({
-        cod,
-        deposito: destino,
-        qtd: 0
-      });
-    }
-
-    dest.increment("qtd", q);
-
-    await Parse.Object.saveAll(
-      [eOrigem, dest],
-      MASTER
-    );
-
-    const curto = (d) =>
-      d.replace("Depósito", "Dep.");
-
-    return salvarMov({
-      tipo: "Transferência",
+    dest.set({
       cod,
-      material: m.get("nome"),
-      quantidade: q,
-      unidade: UNIDADE,
-      qtd: fmtQtd(
-        "Transferência",
-        q,
-        UNIDADE
-      ),
-      de: origem,
-      para: destino,
-      local:
-        `${curto(origem)} → ${curto(destino)}`,
-      obs,
-      responsavel: user.get("nome"),
-      ...dataHora()
+      deposito: destino,
+      qtd: 0,
     });
   }
-);
 
-Parse.Cloud.define(
-  "listarMovimentacoes",
-  async (req) => {
-    auth(req);
+  dest.increment("qtd", q);
 
-    const {
-      tipo = "Todos",
-      inicio,
-      fim,
-      busca = "",
-      page = 1,
-      limit = 8
-    } = req.params;
+  await Parse.Object.saveAll([eOrigem, dest], MASTER);
 
-    const p = Math.max(
-      1,
-      parseInt(page, 10) || 1
-    );
+  const curto = (d) => d.replace("Depósito", "Dep.");
 
-    const l = Math.min(
-      100,
-      Math.max(
-        1,
-        parseInt(limit, 10) || 8
-      )
-    );
+  return salvarMov({
+    tipo: "Transferência",
+    cod,
+    material: m.get("nome"),
+    quantidade: q,
+    unidade: UNIDADE,
+    qtd: fmtQtd("Transferência", q, UNIDADE),
+    de: origem,
+    para: destino,
+    local: `${curto(origem)} → ${curto(destino)}`,
+    obs,
+    responsavel: user.get("nome"),
+    ...dataHora(),
+  });
+});
 
-    const montar = (t) => {
-      let q;
+Parse.Cloud.define("listarMovimentacoes", async (req) => {
+  auth(req);
 
-      if (busca) {
-        const rx = escRx(busca);
+  const {
+    tipo = "Todos",
+    inicio,
+    fim,
+    busca = "",
+    page = 1,
+    limit = 8,
+  } = req.params;
 
-        q = Parse.Query.or(
-          new Parse.Query("Movimentacao")
-            .matches("material", rx, "i"),
+  const p = Math.max(1, parseInt(page, 10) || 1);
 
-          new Parse.Query("Movimentacao")
-            .matches("cod", rx, "i"),
+  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 8));
 
-          new Parse.Query("Movimentacao")
-            .matches("responsavel", rx, "i")
-        );
-      } else {
-        q = new Parse.Query("Movimentacao");
-      }
+  const montar = (t) => {
+    let q;
 
-      if (t && t !== "Todos") {
-        q.equalTo("tipo", t);
-      }
+    if (busca) {
+      const rx = escRx(busca);
 
-      if (inicio) {
-        q.greaterThanOrEqualTo("data", inicio);
-      }
+      q = Parse.Query.or(
+        new Parse.Query("Movimentacao").matches("material", rx, "i"),
 
-      if (fim) {
-        q.lessThanOrEqualTo("data", fim);
-      }
+        new Parse.Query("Movimentacao").matches("cod", rx, "i"),
 
-      return q;
-    };
-
-    const [
-      itens,
-      total,
-      nEntradas,
-      nSaidas,
-      nTransf
-    ] = await Promise.all([
-      montar(tipo)
-        .descending("data")
-        .addDescending("hora")
-        .skip((p - 1) * l)
-        .limit(l)
-        .find(MASTER),
-
-      montar(tipo).count(MASTER),
-      montar("Entrada").count(MASTER),
-      montar("Saída").count(MASTER),
-      montar("Transferência").count(MASTER)
-    ]);
-
-    return {
-      itens: await enriquecerMovs(itens),
-      total,
-      page: p,
-      totalPages: Math.max(
-        1,
-        Math.ceil(total / l)
-      ),
-      resumo: {
-        Entrada: nEntradas,
-        "Saída": nSaidas,
-        "Transferência": nTransf
-      }
-    };
-  }
-);
-
-Parse.Cloud.define(
-  "ultimasMovimentacoes",
-  async (req) => {
-    auth(req);
-
-    const mapa = {
-      entradas: "Entrada",
-      saidas: "Saída",
-      transferencias: "Transferência"
-    };
-
-    const tipo = mapa[req.params.tipo];
-
-    if (!tipo) {
-      fail("Tipo inválido");
+        new Parse.Query("Movimentacao").matches("responsavel", rx, "i"),
+      );
+    } else {
+      q = new Parse.Query("Movimentacao");
     }
 
-    const itens = await new Parse.Query("Movimentacao")
-      .equalTo("tipo", tipo)
-      .descending("createdAt")
-      .limit(5)
-      .find(MASTER);
+    if (t && t !== "Todos") {
+      q.equalTo("tipo", t);
+    }
 
-    return enriquecerMovs(itens);
+    if (inicio) {
+      q.greaterThanOrEqualTo("data", inicio);
+    }
+
+    if (fim) {
+      q.lessThanOrEqualTo("data", fim);
+    }
+
+    return q;
+  };
+
+  const [itens, total, nEntradas, nSaidas, nTransf] = await Promise.all([
+    montar(tipo)
+      .descending("data")
+      .addDescending("hora")
+      .skip((p - 1) * l)
+      .limit(l)
+      .find(MASTER),
+
+    montar(tipo).count(MASTER),
+    montar("Entrada").count(MASTER),
+    montar("Saída").count(MASTER),
+    montar("Transferência").count(MASTER),
+  ]);
+
+  return {
+    itens: await enriquecerMovs(itens),
+    total,
+    page: p,
+    totalPages: Math.max(1, Math.ceil(total / l)),
+    resumo: {
+      Entrada: nEntradas,
+      Saída: nSaidas,
+      Transferência: nTransf,
+    },
+  };
+});
+
+Parse.Cloud.define("ultimasMovimentacoes", async (req) => {
+  auth(req);
+
+  const mapa = {
+    entradas: "Entrada",
+    saidas: "Saída",
+    transferencias: "Transferência",
+  };
+
+  const tipo = mapa[req.params.tipo];
+
+  if (!tipo) {
+    fail("Tipo inválido");
   }
-);
+
+  const itens = await new Parse.Query("Movimentacao")
+    .equalTo("tipo", tipo)
+    .descending("createdAt")
+    .limit(5)
+    .find(MASTER);
+
+  return enriquecerMovs(itens);
+});
 
 Parse.Cloud.define("distribuicao", async (req) => {
   auth(req);
 
-  const [
-    deps,
-    materiais,
-    estoques
-  ] = await Promise.all([
+  const [deps, materiais, estoques] = await Promise.all([
     todos("Deposito", "id_"),
     todos("Material"),
-    todos("Estoque")
+    todos("Estoque"),
   ]);
 
-  const porCod = Object.fromEntries(
-    materiais.map((m) => [
-      m.get("cod"),
-      m
-    ])
-  );
+  const porCod = Object.fromEntries(materiais.map((m) => [m.get("cod"), m]));
 
   const totalPorCod = {};
 
@@ -1087,22 +908,14 @@ Parse.Cloud.define("distribuicao", async (req) => {
 
     const cod = e.get("cod");
 
-    totalPorCod[cod] =
-      (totalPorCod[cod] || 0) +
-      (Number(e.get("qtd")) || 0);
+    totalPorCod[cod] = (totalPorCod[cod] || 0) + (Number(e.get("qtd")) || 0);
   }
 
   return DEPOSITOS.map((nome, index) => {
-    const d = deps.find(
-      (item) => item.get("nome") === nome
-    );
+    const d = deps.find((item) => item.get("nome") === nome);
 
     const itens = estoques
-      .filter(
-        (e) =>
-          e.get("deposito") === nome &&
-          Number(e.get("qtd")) > 0
-      )
+      .filter((e) => e.get("deposito") === nome && Number(e.get("qtd")) > 0)
       .map((e) => {
         const m = porCod[e.get("cod")];
 
@@ -1118,26 +931,17 @@ Parse.Cloud.define("distribuicao", async (req) => {
           qtd: Number(e.get("qtd")),
           unidade: m.get("unidade"),
           minimo: m.get("minimo") || 0,
-          status: calcStatus(
-            totalPorCod[e.get("cod")],
-            m.get("minimo")
-          )
+          status: calcStatus(totalPorCod[e.get("cod")], m.get("minimo")),
         };
       })
       .filter(Boolean);
 
     return {
-      id:
-        d?.get("id_") ||
-        ["A", "B", "C"][index],
+      id: d?.get("id_") || ["A", "B", "C"][index],
       nome,
-      capacidade:
-        d?.get("capacidade") ?? 0,
+      capacidade: d?.get("capacidade") ?? 0,
       materiais: itens,
-      ocupacao: itens.reduce(
-        (s, i) => s + i.qtd,
-        0
-      )
+      ocupacao: itens.reduce((s, i) => s + i.qtd, 0),
     };
   });
 });
@@ -1159,7 +963,7 @@ Parse.Cloud.define("salvarLead", async (req) => {
     material: d.material || "",
     corEstilo: d.corEstilo || "",
     telefone: d.telefone || "",
-    status: "novo"
+    status: "novo",
   });
 
   await lead.save(null, MASTER);
@@ -1182,13 +986,8 @@ async function executarSeed() {
   return "Seed de demonstração desativado";
 }
 
-Parse.Cloud.job(
-  "seed",
-  async () => executarSeed()
-);
+Parse.Cloud.job("seed", async () => executarSeed());
 
-Parse.Cloud.define(
-  "seed",
-  async () => executarSeed(),
-  { requireMaster: true }
-);
+Parse.Cloud.define("seed", async () => executarSeed(), {
+  requireMaster: true,
+});
