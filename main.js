@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const MASTER = { useMasterKey: true };
 
 const DEPOSITOS = ["Depósito A", "Depósito B", "Depósito C"];
@@ -15,13 +17,25 @@ const CATEGORIAS = [
 
 const TIPOS = ["Escovado", "Acetinado", "Polido"];
 
-function fail(erro, campos) {
-  throw new Parse.Error(141, JSON.stringify({ erro, campos }));
+const MIN_VALIDADE = { verificacao: 30, reset: 15 };
+const MAX_TENTATIVAS = 5;
+const INTERVALO_REENVIO_SEG = 60;
+
+function fail(erro, campos, codigo) {
+  throw new Parse.Error(141, JSON.stringify({ erro, campos, codigo }));
 }
 
 function auth(req) {
   if (!req.user) {
     throw new Parse.Error(209, JSON.stringify({ erro: "Não autenticado" }));
+  }
+
+  if (req.user.get("emailVerificado") === false) {
+    fail(
+      "E-mail ainda não verificado",
+      { email: "Confirme seu e-mail para continuar" },
+      "EMAIL_NAO_VERIFICADO",
+    );
   }
 
   return req.user;
@@ -342,6 +356,286 @@ const pubUser = (u) => ({
   cargo: u.get("cargo"),
 });
 
+const esc = (s) =>
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+
+function formatarDataHora(d) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TZ,
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(d || new Date());
+}
+
+async function postJson(url, headers, body) {
+  const h = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...headers,
+  };
+
+  if (typeof fetch === "function") {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify(body),
+    });
+
+    if (!r.ok) {
+      throw new Error(`Falha ao enviar e-mail (HTTP ${r.status}): ${await r.text()}`);
+    }
+
+    return;
+  }
+
+  await Parse.Cloud.httpRequest({
+    method: "POST",
+    url,
+    headers: h,
+    body: JSON.stringify(body),
+  });
+}
+
+async function enviarEmail({ para, assunto, html }) {
+  const provider = (process.env.EMAIL_PROVIDER || "brevo").toLowerCase();
+  const key = process.env.EMAIL_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  const fromName = process.env.EMAIL_FROM_NAME || "Marmopedras";
+
+  if (!key || !from) {
+    throw new Error("E-mail não configurado (EMAIL_API_KEY / EMAIL_FROM)");
+  }
+
+  if (provider === "resend") {
+    await postJson(
+      "https://api.resend.com/emails",
+      { Authorization: `Bearer ${key}` },
+      { from: `${fromName} <${from}>`, to: [para], subject: assunto, html },
+    );
+    return;
+  }
+
+  await postJson(
+    "https://api.brevo.com/v3/smtp/email",
+    { "api-key": key },
+    {
+      sender: { name: fromName, email: from },
+      to: [{ email: para }],
+      subject: assunto,
+      htmlContent: html,
+    },
+  );
+}
+
+function templateEmail(titulo, corpo) {
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e6d8c8;border-radius:8px">
+  <h2 style="color:#5c1a22;margin:0 0 16px">${esc(titulo)}</h2>
+  ${corpo}
+  <p style="color:#999;font-size:12px;margin-top:24px">Marmopedras — controle de estoque</p>
+</div>`;
+}
+
+const hashCodigo = (userId, tipo, codigo) =>
+  crypto
+    .createHmac("sha256", process.env.TOKEN_SECRET || "marmopedras-token")
+    .update(`${userId}:${tipo}:${codigo}`)
+    .digest("hex");
+
+const iguais = (a, b) => {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
+
+async function buscarUsuarioPorEmail(email) {
+  const mail = String(email || "").toLowerCase().trim();
+
+  if (!mail) {
+    return null;
+  }
+
+  return new Parse.Query(Parse.User).equalTo("email", mail).first(MASTER);
+}
+
+async function enviadoRecentemente(user, tipo) {
+  const limite = new Date(Date.now() - INTERVALO_REENVIO_SEG * 1000);
+
+  const t = await new Parse.Query("EmailToken")
+    .equalTo("userId", user.id)
+    .equalTo("tipo", tipo)
+    .greaterThan("createdAt", limite)
+    .first(MASTER);
+
+  return !!t;
+}
+
+async function gerarCodigo(user, tipo) {
+  const anteriores = await new Parse.Query("EmailToken")
+    .equalTo("userId", user.id)
+    .equalTo("tipo", tipo)
+    .equalTo("usado", false)
+    .limit(100)
+    .find(MASTER);
+
+  if (anteriores.length) {
+    anteriores.forEach((t) => t.set("usado", true));
+    await Parse.Object.saveAll(anteriores, MASTER);
+  }
+
+  const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+
+  const t = new Parse.Object("EmailToken");
+
+  t.set({
+    userId: user.id,
+    tipo,
+    hash: hashCodigo(user.id, tipo, codigo),
+    expiraEm: new Date(Date.now() + MIN_VALIDADE[tipo] * 60 * 1000),
+    usado: false,
+    tentativas: 0,
+  });
+
+  await t.save(null, MASTER);
+
+  return codigo;
+}
+
+async function enviarCodigo(user, tipo) {
+  const codigo = await gerarCodigo(user, tipo);
+  const nome = esc(user.get("nome") || "");
+  const caixa = `<p style="font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;background:#faf6f1;padding:16px;border-radius:6px;margin:16px 0">${codigo}</p>`;
+
+  if (tipo === "verificacao") {
+    await enviarEmail({
+      para: user.get("email"),
+      assunto: "Confirme seu e-mail — Marmopedras",
+      html: templateEmail(
+        "Confirme seu e-mail",
+        `<p>Olá, ${nome}!</p>
+         <p>Use o código abaixo para confirmar seu cadastro. Ele vale por ${MIN_VALIDADE.verificacao} minutos.</p>
+         ${caixa}
+         <p>Se você não criou uma conta, ignore este e-mail.</p>`,
+      ),
+    });
+    return;
+  }
+
+  await enviarEmail({
+    para: user.get("email"),
+    assunto: "Recuperação de senha — Marmopedras",
+    html: templateEmail(
+      "Recuperação de senha",
+      `<p>Olá, ${nome}!</p>
+       <p>Use o código abaixo para criar uma nova senha. Ele vale por ${MIN_VALIDADE.reset} minutos.</p>
+       ${caixa}
+       <p>Se você não pediu a recuperação, ignore este e-mail — sua senha continua a mesma.</p>`,
+    ),
+  });
+}
+
+async function validarCodigo(user, tipo, codigo) {
+  const invalido = () =>
+    fail("Código inválido ou expirado", {
+      codigo: "Código inválido ou expirado",
+    });
+
+  if (!user || !/^\d{6}$/.test(String(codigo || "").trim())) {
+    invalido();
+  }
+
+  const t = await new Parse.Query("EmailToken")
+    .equalTo("userId", user.id)
+    .equalTo("tipo", tipo)
+    .equalTo("usado", false)
+    .descending("createdAt")
+    .first(MASTER);
+
+  if (
+    !t ||
+    t.get("expiraEm") < new Date() ||
+    (t.get("tentativas") || 0) >= MAX_TENTATIVAS
+  ) {
+    invalido();
+  }
+
+  if (!iguais(t.get("hash"), hashCodigo(user.id, tipo, String(codigo).trim()))) {
+    t.increment("tentativas");
+    await t.save(null, MASTER);
+    invalido();
+  }
+
+  t.set("usado", true);
+  await t.save(null, MASTER);
+}
+
+Parse.Cloud.beforeSave(Parse.User, async (req) => {
+  if (req.master) {
+    return;
+  }
+
+  if (req.object.isNew()) {
+    req.object.set("emailVerificado", false);
+    return;
+  }
+
+  if (req.object.dirty("emailVerificado")) {
+    throw new Parse.Error(
+      141,
+      JSON.stringify({ erro: "Operação não permitida" }),
+    );
+  }
+});
+
+Parse.Cloud.beforeLogin(async (req) => {
+  if (req.object.get("emailVerificado") === false) {
+    fail(
+      "E-mail ainda não verificado. Digite o código enviado ao seu e-mail.",
+      { email: "E-mail ainda não verificado" },
+      "EMAIL_NAO_VERIFICADO",
+    );
+  }
+});
+
+Parse.Cloud.afterSave(Parse.User, async (req) => {
+  if (req.original) {
+    return;
+  }
+
+  const admin = process.env.ADMIN_EMAIL;
+
+  if (!admin) {
+    return;
+  }
+
+  const u = req.object;
+
+  try {
+    await enviarEmail({
+      para: admin,
+      assunto: "Novo cadastro — Marmopedras",
+      html: templateEmail(
+        "Novo usuário cadastrado",
+        `<table style="border-collapse:collapse;width:100%">
+           <tr><td style="padding:6px 0;color:#666">Nome</td><td><b>${esc(u.get("nome"))}</b></td></tr>
+           <tr><td style="padding:6px 0;color:#666">E-mail</td><td>${esc(u.get("email"))}</td></tr>
+           <tr><td style="padding:6px 0;color:#666">Telefone</td><td>${esc(u.get("telefone") || "—")}</td></tr>
+           <tr><td style="padding:6px 0;color:#666">Cargo</td><td>${esc(u.get("cargo") || "—")}</td></tr>
+           <tr><td style="padding:6px 0;color:#666">Data e hora</td><td>${esc(formatarDataHora(u.createdAt))}</td></tr>
+         </table>`,
+      ),
+    });
+  } catch (e) {
+    console.error("Falha ao avisar o admin sobre novo cadastro:", e.message);
+  }
+});
+
 Parse.Cloud.define("register", async (req) => {
   const { nome, email, telefone, cargo, senha } = req.params;
 
@@ -374,6 +668,7 @@ Parse.Cloud.define("register", async (req) => {
     nome: String(nome).trim(),
     telefone: telefone || "",
     cargo: cargo || "Funcionário",
+    emailVerificado: false,
   });
 
   try {
@@ -388,10 +683,99 @@ Parse.Cloud.define("register", async (req) => {
     throw e;
   }
 
-  return {
-    token: user.getSessionToken(),
-    usuario: pubUser(user),
-  };
+  let emailEnviado = true;
+
+  try {
+    await enviarCodigo(user, "verificacao");
+  } catch (e) {
+    emailEnviado = false;
+    console.error("Falha ao enviar código de verificação:", e.message);
+  }
+
+  return { precisaVerificar: true, email: mail, emailEnviado };
+});
+
+Parse.Cloud.define("verificarEmail", async (req) => {
+  const { email, codigo } = req.params;
+
+  const user = await buscarUsuarioPorEmail(email);
+
+  if (user && user.get("emailVerificado") === false) {
+    await validarCodigo(user, "verificacao", codigo);
+
+    user.set("emailVerificado", true);
+    await user.save(null, MASTER);
+
+    return { verificado: true };
+  }
+
+  if (user) {
+    return { verificado: true };
+  }
+
+  fail("Código inválido ou expirado", {
+    codigo: "Código inválido ou expirado",
+  });
+});
+
+Parse.Cloud.define("reenviarVerificacao", async (req) => {
+  const user = await buscarUsuarioPorEmail(req.params.email);
+
+  if (
+    user &&
+    user.get("emailVerificado") === false &&
+    !(await enviadoRecentemente(user, "verificacao"))
+  ) {
+    try {
+      await enviarCodigo(user, "verificacao");
+    } catch (e) {
+      console.error("Falha ao reenviar verificação:", e.message);
+    }
+  }
+
+  return { ok: true };
+});
+
+Parse.Cloud.define("solicitarRecuperacaoSenha", async (req) => {
+  const user = await buscarUsuarioPorEmail(req.params.email);
+
+  if (user && !(await enviadoRecentemente(user, "reset"))) {
+    try {
+      await enviarCodigo(user, "reset");
+    } catch (e) {
+      console.error("Falha ao enviar recuperação de senha:", e.message);
+    }
+  }
+
+  return { ok: true };
+});
+
+Parse.Cloud.define("redefinirSenha", async (req) => {
+  const { email, codigo, novaSenha } = req.params;
+
+  if (!novaSenha || String(novaSenha).length < 6) {
+    fail("Dados inválidos", { senha: "Mínimo 6 caracteres" });
+  }
+
+  const user = await buscarUsuarioPorEmail(email);
+
+  if (!user) {
+    fail("Código inválido ou expirado", {
+      codigo: "Código inválido ou expirado",
+    });
+  }
+
+  await validarCodigo(user, "reset", codigo);
+
+  user.set("password", novaSenha);
+
+  if (user.get("emailVerificado") === false) {
+    user.set("emailVerificado", true);
+  }
+
+  await user.save(null, MASTER);
+
+  return { ok: true };
 });
 
 Parse.Cloud.define("login", async (req) => {
@@ -410,6 +794,10 @@ Parse.Cloud.define("login", async (req) => {
       usuario: pubUser(user),
     };
   } catch (e) {
+    if (e.code === 141) {
+      throw e;
+    }
+
     fail("E-mail ou senha incorretos");
   }
 });
