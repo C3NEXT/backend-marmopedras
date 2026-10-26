@@ -1379,3 +1379,39 @@ Parse.Cloud.job("seed", async () => executarSeed());
 Parse.Cloud.define("seed", async () => executarSeed(), {
   requireMaster: true,
 });
+
+Parse.Cloud.define(
+  "testarEmail",
+  async (req) => {
+    const para = req.params.para || process.env.ADMIN_EMAIL;
+
+    try {
+      await enviarEmail({
+        para,
+        assunto: "Teste — Marmopedras",
+        html: templateEmail(
+          "Teste de e-mail",
+          "<p>Se você recebeu esta mensagem, o envio de e-mails está funcionando.</p>",
+        ),
+      });
+
+      return {
+        ok: true,
+        para,
+        provider: process.env.EMAIL_PROVIDER || "brevo",
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        erro: e.message,
+        configurado: {
+          EMAIL_API_KEY: !!process.env.EMAIL_API_KEY,
+          EMAIL_FROM: !!process.env.EMAIL_FROM,
+          ADMIN_EMAIL: !!process.env.ADMIN_EMAIL,
+          EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || "brevo (padrão)",
+        },
+      };
+    }
+  },
+  { requireMaster: true },
+);
