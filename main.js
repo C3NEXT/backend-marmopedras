@@ -502,6 +502,8 @@ async function gerarCodigo(user, tipo) {
     tentativas: 0,
   });
 
+  t.setACL(new Parse.ACL());
+
   await t.save(null, MASTER);
 
   return codigo;
@@ -659,6 +661,43 @@ Parse.Cloud.define("register", async (req) => {
 
   const mail = String(email).toLowerCase().trim();
 
+  const existente = await buscarUsuarioPorEmail(mail);
+
+  if (existente) {
+    if (existente.get("emailVerificado") !== false) {
+      fail("E-mail já cadastrado", {
+        email: "E-mail já cadastrado",
+      });
+    }
+
+    existente.set({
+      nome: String(nome).trim(),
+      telefone: telefone || "",
+      cargo: cargo || "Funcionário",
+      password: senha,
+    });
+
+    await existente.save(null, MASTER);
+
+    let reenvioOk = true;
+
+    if (!(await enviadoRecentemente(existente, "verificacao"))) {
+      try {
+        await enviarCodigo(existente, "verificacao");
+      } catch (e) {
+        reenvioOk = false;
+        console.error("Falha ao reenviar código de verificação:", e.message);
+      }
+    }
+
+    return {
+      precisaVerificar: true,
+      email: mail,
+      emailEnviado: reenvioOk,
+      reenviado: true,
+    };
+  }
+
   const user = new Parse.User();
 
   user.set({
@@ -695,8 +734,19 @@ Parse.Cloud.define("register", async (req) => {
   return { precisaVerificar: true, email: mail, emailEnviado };
 });
 
-Parse.Cloud.define("verificarEmail", async (req) => {
-  const { email, codigo } = req.params;
+const parametros = (req) => {
+  const x = req.params || {};
+
+  return {
+    email: x.email,
+    codigo: x.codigo ?? x.code ?? x.token,
+    novaSenha:
+      x.novaSenha ?? x.senha ?? x.password ?? x.newPassword ?? x.nova_senha,
+  };
+};
+
+const verificarEmail = async (req) => {
+  const { email, codigo } = parametros(req);
 
   const user = await buscarUsuarioPorEmail(email);
 
@@ -716,10 +766,10 @@ Parse.Cloud.define("verificarEmail", async (req) => {
   fail("Código inválido ou expirado", {
     codigo: "Código inválido ou expirado",
   });
-});
+};
 
-Parse.Cloud.define("reenviarVerificacao", async (req) => {
-  const user = await buscarUsuarioPorEmail(req.params.email);
+const reenviarVerificacao = async (req) => {
+  const user = await buscarUsuarioPorEmail(parametros(req).email);
 
   if (
     user &&
@@ -734,10 +784,10 @@ Parse.Cloud.define("reenviarVerificacao", async (req) => {
   }
 
   return { ok: true };
-});
+};
 
-Parse.Cloud.define("solicitarRecuperacaoSenha", async (req) => {
-  const user = await buscarUsuarioPorEmail(req.params.email);
+const solicitarRecuperacaoSenha = async (req) => {
+  const user = await buscarUsuarioPorEmail(parametros(req).email);
 
   if (user && !(await enviadoRecentemente(user, "reset"))) {
     try {
@@ -748,10 +798,10 @@ Parse.Cloud.define("solicitarRecuperacaoSenha", async (req) => {
   }
 
   return { ok: true };
-});
+};
 
-Parse.Cloud.define("redefinirSenha", async (req) => {
-  const { email, codigo, novaSenha } = req.params;
+const redefinirSenha = async (req) => {
+  const { email, codigo, novaSenha } = parametros(req);
 
   if (!novaSenha || String(novaSenha).length < 6) {
     fail("Dados inválidos", { senha: "Mínimo 6 caracteres" });
@@ -776,7 +826,32 @@ Parse.Cloud.define("redefinirSenha", async (req) => {
   await user.save(null, MASTER);
 
   return { ok: true };
-});
+};
+
+const registrarFuncao = (nomes, fn) =>
+  nomes.forEach((nome) => Parse.Cloud.define(nome, fn));
+
+registrarFuncao(["verificarEmail", "verify-email", "verifyEmail"], verificarEmail);
+
+registrarFuncao(
+  [
+    "reenviarVerificacao",
+    "resend-verification",
+    "resend-code",
+    "resendVerification",
+  ],
+  reenviarVerificacao,
+);
+
+registrarFuncao(
+  ["solicitarRecuperacaoSenha", "forgot-password", "forgotPassword"],
+  solicitarRecuperacaoSenha,
+);
+
+registrarFuncao(
+  ["redefinirSenha", "reset-password", "resetPassword"],
+  redefinirSenha,
+);
 
 Parse.Cloud.define("login", async (req) => {
   const { email, senha } = req.params;
