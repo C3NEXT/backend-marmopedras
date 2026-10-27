@@ -542,7 +542,7 @@ async function enviarCodigo(user, tipo) {
   });
 }
 
-async function validarCodigo(user, tipo, codigo) {
+async function validarCodigo(user, tipo, codigo, consumir = true) {
   const invalido = () =>
     fail("Código inválido ou expirado", {
       codigo: "Código inválido ou expirado",
@@ -573,8 +573,10 @@ async function validarCodigo(user, tipo, codigo) {
     invalido();
   }
 
-  t.set("usado", true);
-  await t.save(null, MASTER);
+  if (consumir) {
+    t.set("usado", true);
+    await t.save(null, MASTER);
+  }
 }
 
 Parse.Cloud.beforeSave(Parse.User, async (req) => {
@@ -828,6 +830,22 @@ const redefinirSenha = async (req) => {
   return { ok: true };
 };
 
+const verificarCodigoReset = async (req) => {
+  const { email, codigo } = parametros(req);
+
+  const user = await buscarUsuarioPorEmail(email);
+
+  if (!user) {
+    fail("Código inválido ou expirado", {
+      codigo: "Código inválido ou expirado",
+    });
+  }
+
+  await validarCodigo(user, "reset", codigo, false);
+
+  return { ok: true, valido: true, verificado: true };
+};
+
 const registrarFuncao = (nomes, fn) =>
   nomes.forEach((nome) => Parse.Cloud.define(nome, fn));
 
@@ -844,8 +862,18 @@ registrarFuncao(
 );
 
 registrarFuncao(
-  ["solicitarRecuperacaoSenha", "forgot-password", "forgotPassword"],
+  [
+    "solicitarRecuperacaoSenha",
+    "forgot-password",
+    "forgotPassword",
+    "resend-reset-code",
+  ],
   solicitarRecuperacaoSenha,
+);
+
+registrarFuncao(
+  ["verificarCodigoReset", "verify-reset-code", "verifyResetCode"],
+  verificarCodigoReset,
 );
 
 registrarFuncao(
