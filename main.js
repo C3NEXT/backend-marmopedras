@@ -1518,3 +1518,318 @@ Parse.Cloud.define(
   },
   { requireMaster: true },
 );
+
+const PLANTA_CLASSE = "PlantaDeposito";
+const PLANTA_TAMANHO_MIN = { largura: 650, altura: 490 };
+const PLANTA_TAMANHO_MAX = { largura: 4000, altura: 1800 };
+const PLANTA_PADRAO = ["A", "B", "C"];
+const PLANTA_MAX_DEPOSITOS = 50;
+const PLANTA_MAX_CAVALETES = 500;
+
+const limitar = (v, min, max, padrao) => {
+  const n = Number(v);
+
+  if (!Number.isFinite(n)) {
+    return padrao;
+  }
+
+  return Math.round(Math.min(max, Math.max(min, n)));
+};
+
+function sanitizarCavalete(c) {
+  const id = Number(c && c.id);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return null;
+  }
+
+  const x = Number(c.x);
+  const y = Number(c.y);
+
+  return {
+    id,
+    nomeCustomizado: String(c.nomeCustomizado || "").trim().slice(0, 20),
+    x: Number.isFinite(x) ? Math.max(0, Math.round(x * 100) / 100) : 0,
+    y: Number.isFinite(y) ? Math.max(0, Math.round(y * 100) / 100) : 0,
+    orientacao: c.orientacao === "vertical" ? "vertical" : "horizontal",
+    anotacoes: String(c.anotacoes || "").slice(0, 2000),
+  };
+}
+
+function sanitizarCavaletes(lista) {
+  if (!Array.isArray(lista)) {
+    return [];
+  }
+
+  if (lista.length > PLANTA_MAX_CAVALETES) {
+    fail("Cavaletes demais", {
+      cavaletes: `Máximo de ${PLANTA_MAX_CAVALETES} cavaletes por depósito`,
+    });
+  }
+
+  const vistos = new Set();
+  const saida = [];
+
+  for (const item of lista) {
+    const cav = sanitizarCavalete(item);
+
+    if (cav && !vistos.has(cav.id)) {
+      vistos.add(cav.id);
+      saida.push(cav);
+    }
+  }
+
+  return saida;
+}
+
+function sanitizarTamanho(t) {
+  return {
+    largura: limitar(
+      t && t.largura,
+      PLANTA_TAMANHO_MIN.largura,
+      PLANTA_TAMANHO_MAX.largura,
+      PLANTA_TAMANHO_MIN.largura,
+    ),
+    altura: limitar(
+      t && t.altura,
+      PLANTA_TAMANHO_MIN.altura,
+      PLANTA_TAMANHO_MAX.altura,
+      PLANTA_TAMANHO_MIN.altura,
+    ),
+  };
+}
+
+function validarNomesDepositos(depositos) {
+  if (!Array.isArray(depositos) || depositos.length === 0) {
+    fail("Depósitos inválidos", {
+      depositos: "Você precisa ter pelo menos um depósito",
+    });
+  }
+
+  if (depositos.length > PLANTA_MAX_DEPOSITOS) {
+    fail("Depósitos demais", {
+      depositos: `Máximo de ${PLANTA_MAX_DEPOSITOS} depósitos`,
+    });
+  }
+
+  const nomes = depositos.map((d) => String(d ?? "").trim());
+  const minusculos = new Set();
+
+  for (const nome of nomes) {
+    if (!nome) {
+      fail("Depósitos inválidos", {
+        depositos: "Digite um nome para o depósito",
+      });
+    }
+
+    if (nome.length > 40) {
+      fail("Depósitos inválidos", {
+        depositos: `O nome "${nome.slice(0, 15)}…" passa de 40 caracteres`,
+      });
+    }
+
+    const chave = nome.toLowerCase();
+
+    if (minusculos.has(chave)) {
+      fail("Depósitos inválidos", {
+        depositos: `Já existe um depósito com o nome "${nome}"`,
+      });
+    }
+
+    minusculos.add(chave);
+  }
+
+  return nomes;
+}
+
+async function semearPlantaPadrao() {
+  const objetos = PLANTA_PADRAO.map((nome, i) => {
+    const o = new Parse.Object(PLANTA_CLASSE);
+
+    o.set({
+      nome,
+      ordem: i,
+      largura: PLANTA_TAMANHO_MIN.largura,
+      altura: PLANTA_TAMANHO_MIN.altura,
+      cavaletes: [],
+    });
+
+    o.setACL(new Parse.ACL());
+
+    return o;
+  });
+
+  await Parse.Object.saveAll(objetos, MASTER);
+
+  return objetos;
+}
+
+function montarRespostaPlanta(registros) {
+  const depositos = [];
+  const plantas = {};
+  const tamanhos = {};
+
+  for (const r of registros) {
+    const nome = r.get("nome");
+
+    depositos.push(nome);
+    plantas[nome] = r.get("cavaletes") || [];
+    tamanhos[nome] = {
+      largura: r.get("largura") || PLANTA_TAMANHO_MIN.largura,
+      altura: r.get("altura") || PLANTA_TAMANHO_MIN.altura,
+    };
+  }
+
+  return { depositos, plantas, tamanhos };
+}
+
+Parse.Cloud.define("carregarPlanta", async (req) => {
+  auth(req);
+
+  let registros = await todos(PLANTA_CLASSE, "ordem");
+
+  if (registros.length === 0) {
+    registros = await semearPlantaPadrao();
+  }
+
+  return montarRespostaPlanta(registros);
+});
+
+Parse.Cloud.define("salvarPlanta", async (req) => {
+  auth(req);
+
+  const { depositos, plantas = {}, tamanhos = {} } = req.params || {};
+
+  const nomes = validarNomesDepositos(depositos);
+
+  const existentes = await todos(PLANTA_CLASSE, "ordem");
+  const porNome = new Map(existentes.map((r) => [r.get("nome"), r]));
+
+  const paraSalvar = [];
+
+  nomes.forEach((nome, ordem) => {
+    const tam = sanitizarTamanho(tamanhos[nome]);
+    const cavaletes = sanitizarCavaletes(plantas[nome]);
+
+    let reg = porNome.get(nome);
+
+    if (!reg) {
+      reg = new Parse.Object(PLANTA_CLASSE);
+      reg.set("nome", nome);
+      reg.setACL(new Parse.ACL());
+    }
+
+    reg.set({
+      ordem,
+      largura: tam.largura,
+      altura: tam.altura,
+      cavaletes,
+    });
+
+    paraSalvar.push(reg);
+  });
+
+  const nomesSet = new Set(nomes);
+  const paraExcluir = existentes.filter((r) => !nomesSet.has(r.get("nome")));
+
+  await Parse.Object.saveAll(paraSalvar, MASTER);
+
+  if (paraExcluir.length) {
+    await Parse.Object.destroyAll(paraExcluir, MASTER);
+  }
+
+  return {
+    ok: true,
+    depositos: nomes.length,
+    cavaletes: nomes.reduce(
+      (s, n) => s + sanitizarCavaletes(plantas[n]).length,
+      0,
+    ),
+    salvoEm: new Date().toISOString(),
+  };
+});
+
+Parse.Cloud.define("criarDepositoPlanta", async (req) => {
+  auth(req);
+
+  const nome = String((req.params || {}).nome ?? "").trim();
+
+  if (!nome) {
+    fail("Digite um nome para o depósito.", {
+      nome: "Digite um nome para o depósito.",
+    });
+  }
+
+  if (nome.length > 40) {
+    fail("Nome muito longo", { nome: "Máximo de 40 caracteres" });
+  }
+
+  const existentes = await todos(PLANTA_CLASSE, "ordem");
+
+  if (existentes.length >= PLANTA_MAX_DEPOSITOS) {
+    fail("Limite de depósitos atingido", {
+      nome: `Máximo de ${PLANTA_MAX_DEPOSITOS} depósitos`,
+    });
+  }
+
+  if (existentes.some((r) => r.get("nome").toLowerCase() === nome.toLowerCase())) {
+    fail("Já existe um depósito com esse nome.", {
+      nome: "Já existe um depósito com esse nome.",
+    });
+  }
+
+  const maiorOrdem = existentes.reduce(
+    (m, r) => Math.max(m, Number(r.get("ordem")) || 0),
+    -1,
+  );
+
+  const reg = new Parse.Object(PLANTA_CLASSE);
+
+  reg.set({
+    nome,
+    ordem: maiorOrdem + 1,
+    largura: PLANTA_TAMANHO_MIN.largura,
+    altura: PLANTA_TAMANHO_MIN.altura,
+    cavaletes: [],
+  });
+
+  reg.setACL(new Parse.ACL());
+
+  await reg.save(null, MASTER);
+
+  return {
+    nome,
+    ordem: reg.get("ordem"),
+    tamanho: { ...PLANTA_TAMANHO_MIN },
+    cavaletes: [],
+  };
+});
+
+Parse.Cloud.define("excluirDepositoPlanta", async (req) => {
+  auth(req);
+
+  const nome = String((req.params || {}).nome ?? "").trim();
+
+  const existentes = await todos(PLANTA_CLASSE, "ordem");
+
+  if (existentes.length <= 1) {
+    fail("Você precisa ter pelo menos um depósito.", {
+      nome: "Você precisa ter pelo menos um depósito.",
+    });
+  }
+
+  const alvo = existentes.find((r) => r.get("nome") === nome);
+
+  if (!alvo) {
+    fail("Depósito não encontrado", { nome: "Depósito não encontrado" });
+  }
+
+  await alvo.destroy(MASTER);
+
+  return {
+    ok: true,
+    depositos: existentes
+      .filter((r) => r.id !== alvo.id)
+      .map((r) => r.get("nome")),
+  };
+});
