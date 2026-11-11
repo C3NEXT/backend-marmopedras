@@ -11,13 +11,11 @@ function setup() {
   };
   Object.assign(process.env, ENV_PADRAO);
 
-  // AJUSTE o caminho se o seu arquivo não estiver em cloud/main.js
   require("../main");
 
   const call = (nome, params = {}, user) =>
     fake.functions[nome]({ params, user, master: false });
 
-  // Espera uma falha e devolve { code, erro, campos, codigo }
   const falha = async (promessa) => {
     try {
       await promessa;
