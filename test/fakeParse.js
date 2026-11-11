@@ -1,6 +1,5 @@
-// Implementação mínima do SDK Parse em memória, só o que o cloud/main.js usa.
 function createFakeParse() {
-  const store = {}; // className -> Map<id, { id, data, createdAt, seq }>
+  const store = {}; 
   const functions = {};
   const validators = {};
   const hooks = {};
@@ -102,7 +101,7 @@ function createFakeParse() {
       );
       if (!row) throw new ParseError(101, "Invalid username/password.");
       const user = hidratar("_User", row);
-      // o servidor real roda o beforeLogin antes de concluir o login
+    
       if (hooks.beforeLogin) await hooks.beforeLogin({ object: user });
       return user;
     }
@@ -117,7 +116,7 @@ function createFakeParse() {
       this.className = cls === FakeUser ? "_User" : cls;
       this.preds = [];
       this.ordens = [];
-      this._limit = 100; // padrão do Parse
+      this._limit = 100; 
       this._skip = 0;
       this.ors = null;
     }
@@ -237,9 +236,7 @@ function createFakeParse() {
     functions,
     validators,
     hooks,
-    // linhas cruas de uma classe (mutáveis, úteis para "envelhecer" tokens etc.)
     rows: (cls) => [...tabela(cls).values()],
-    // insere direto no banco, sem passar pelo cloud code
     insertMany(cls, lista) {
       for (const data of lista) {
         const id = `id${++seq}`;
