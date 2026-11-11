@@ -365,12 +365,12 @@ describe("listarMateriais", () => {
 
   describe("filtros", () => {
     beforeEach(async () => {
-      await criar(); // MAT-001
-      await criar({ nome: "Carrara", categoria: "Mármores", tipo: "" }); // MAT-002
-      await criar({ nome: "Preto", categoria: "Granitos", tipo: "Escovado" }); // MAT-003
-      await entrada({ codigo: "MAT-001", quantidade: 10 }); // ok
-      await entrada({ codigo: "MAT-002", quantidade: 8 }); // baixo
-      await entrada({ codigo: "MAT-003", quantidade: 3 }); // crítico
+      await criar(); 
+      await criar({ nome: "Carrara", categoria: "Mármores", tipo: "" }); 
+      await criar({ nome: "Preto", categoria: "Granitos", tipo: "Escovado" }); 
+      await entrada({ codigo: "MAT-001", quantidade: 10 }); 
+      await entrada({ codigo: "MAT-002", quantidade: 8 }); 
+      await entrada({ codigo: "MAT-003", quantidade: 3 }); 
     });
 
     const cods = async (p) => (await listar(p)).map((m) => m.cod);
@@ -407,12 +407,12 @@ describe("listarMateriais", () => {
 
 describe("listarMovimentacoes", () => {
   beforeEach(async () => {
-    await criar(); // MAT-001 Granitos
-    await criar({ nome: "Carrara", categoria: "Mármores", tipo: "", minimo: 0 }); // MAT-002
+    await criar(); 
+    await criar({ nome: "Carrara", categoria: "Mármores", tipo: "", minimo: 0 }); 
     await entrada({ codigo: "MAT-001", quantidade: 10, data: "2020-01-10" });
     await entrada({ codigo: "MAT-002", quantidade: 5, data: "2020-01-11" });
     await saida({ quantidade: 2, obra: "Casa", data: "2020-01-12", responsavel: "Carlos" });
-    await transf({ quantidade: 1 }); // hoje
+    await transf({ quantidade: 1 }); 
   });
 
   const listarMov = (p = {}) => call("listarMovimentacoes", p, user);
@@ -504,7 +504,7 @@ describe("ultimasMovimentacoes", () => {
 
 describe("painel", () => {
   test("cards, últimas movimentações e críticos", async () => {
-    // estoques: 3 (crítico), 8 (baixo), 20 (ok), 1, 2, 4 (críticos)
+
     const estoques = [3, 8, 20, 1, 2, 4];
     for (let i = 0; i < estoques.length; i++) {
       await criar({ nome: `Material ${i + 1}` });
@@ -514,7 +514,7 @@ describe("painel", () => {
     await saida({ codigo: "MAT-003", obra: "A" });
     await saida({ codigo: "MAT-003", obra: "B" });
     await saida({ codigo: "MAT-003", obra: "A" });
-    await saida({ codigo: "MAT-003", obra: "Antiga", data: "2020-01-01" }); // não conta como hoje
+    await saida({ codigo: "MAT-003", obra: "Antiga", data: "2020-01-01" }); 
 
     const r = await call("painel", {}, user);
 
@@ -562,13 +562,13 @@ describe("distribuicao", () => {
     const a = r[0];
 
     expect(a).toMatchObject({ id: "A", capacidade: 100, ocupacao: 5 });
-    expect(a.materiais).toHaveLength(1); // ignora estoque sem material
+    expect(a.materiais).toHaveLength(1); 
     expect(a.materiais[0]).toMatchObject({
       cod: "MAT-001",
       tipo: "Polido",
       unidade: "chapas",
       qtd: 5,
-      status: "crítico", // total 10 < 60% de 20
+      status: "crítico", 
     });
     expect(r[1]).toMatchObject({ capacidade: 50, ocupacao: 5 });
     expect(r[2]).toMatchObject({ id: "C", capacidade: 0, ocupacao: 0 });
