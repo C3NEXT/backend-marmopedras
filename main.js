@@ -196,16 +196,33 @@ async function buscarMaterial({ codigo, material } = {}) {
   return m;
 }
 
-async function proximoCodigo() {
+const numeroDoCodigo = (cod) =>
+  parseInt(String(cod).replace(/\D/g, ""), 10);
+
+const codigoDoNumero = (n) => `MAT-${String(n).padStart(3, "0")}`;
+
+// Próximo número de material. Usa o campo numérico "num" (uma consulta só).
+// Se a base ainda não tem "num" (materiais antigos), varre a coleção uma vez.
+async function proximoNumero() {
+  const ultimo = await new Parse.Query("Material")
+    .descending("num")
+    .first(MASTER);
+
+  const n = ultimo ? Number(ultimo.get("num")) : NaN;
+
+  if (Number.isFinite(n)) {
+    return n + 1;
+  }
+
   const lista = await todos("Material");
 
   const maior = lista.reduce((mx, m) => {
-    const n = parseInt(String(m.get("cod")).replace(/\D/g, ""), 10);
+    const k = numeroDoCodigo(m.get("cod"));
 
-    return isNaN(n) ? mx : Math.max(mx, n);
+    return isNaN(k) ? mx : Math.max(mx, k);
   }, 0);
 
-  return `MAT-${String(maior + 1).padStart(3, "0")}`;
+  return maior + 1;
 }
 
 async function criarMaterialNovo({
@@ -256,10 +273,13 @@ async function criarMaterialNovo({
     });
   }
 
+  const numero = await proximoNumero();
+
   const m = new Parse.Object("Material");
 
   m.set({
-    cod: await proximoCodigo(),
+    cod: codigoDoNumero(numero),
+    num: numero,
     nome,
     categoria,
     tipo,
@@ -273,7 +293,14 @@ async function criarMaterialNovo({
 }
 
 async function enriquecerMovs(itens) {
-  const materiais = await todos("Material");
+  const cods = [...new Set(itens.map((i) => i.get("cod")).filter(Boolean))];
+
+  const materiais = cods.length
+    ? await new Parse.Query("Material")
+        .containedIn("cod", cods)
+        .limit(cods.length)
+        .find(MASTER)
+    : [];
 
   const porCod = Object.fromEntries(materiais.map((m) => [m.get("cod"), m]));
 
@@ -295,18 +322,29 @@ async function listarMateriais() {
     todos("Material", "cod"),
     todos("Estoque"),
   ]);
+  
+  const porCod = new Map();
+
+  for (const e of estoques) {
+    if (!DEPOSITOS.includes(e.get("deposito")) || !(Number(e.get("qtd")) > 0)) {
+      continue;
+    }
+
+    const c = e.get("cod");
+
+    if (!porCod.has(c)) {
+      porCod.set(c, []);
+    }
+
+    porCod.get(c).push(e);
+  }
 
   return materiais.map((m) => {
     const cod = m.get("cod");
 
-    const itens = estoques
-      .filter(
-        (e) =>
-          e.get("cod") === cod &&
-          DEPOSITOS.includes(e.get("deposito")) &&
-          Number(e.get("qtd")) > 0,
-      )
-      .sort((a, b) => Number(b.get("qtd")) - Number(a.get("qtd")));
+    const itens = (porCod.get(cod) || []).sort(
+      (a, b) => Number(b.get("qtd")) - Number(a.get("qtd")),
+    );
 
     const total = itens.reduce((s, e) => s + Number(e.get("qtd")), 0);
 
@@ -1481,6 +1519,27 @@ Parse.Cloud.job("seed", async () => executarSeed());
 
 Parse.Cloud.define("seed", async () => executarSeed(), {
   requireMaster: true,
+});
+
+Parse.Cloud.job("migrarNumMaterial", async () => {
+  const lista = await todos("Material");
+
+  const alterados = [];
+
+  for (const m of lista) {
+    const n = numeroDoCodigo(m.get("cod"));
+
+    if (!isNaN(n) && m.get("num") === undefined) {
+      m.set("num", n);
+      alterados.push(m);
+    }
+  }
+
+  if (alterados.length) {
+    await Parse.Object.saveAll(alterados, MASTER);
+  }
+
+  return `Materiais atualizados: ${alterados.length}`;
 });
 
 Parse.Cloud.define(
